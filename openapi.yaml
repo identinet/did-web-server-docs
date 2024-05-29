@@ -1,0 +1,356 @@
+# OpenAPI Specification Explained: https://learn.openapis.org/specification/
+# Documentation: https://spec.openapis.org/oas/v3.1.0.html
+# Learning OpenAPI: https://redoc.ly/docs/resources/learning-openapi/
+# OpenAPI Guide: https://swagger.io/docs/specification/about/
+# HTTP status codes: https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
+# HTTP methods: https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol#Request_methods
+openapi: 3.1.0
+info:
+  version: "0.0.1"
+  title: did-web-server API documentation
+  description: |
+    This is the Open API specification for [did-web-server](https://dws.identinet.io).
+
+    - [Open API specifcation download](/openapi.yaml)
+    - [Source code](https://github.com/identinet/did-web-server)
+    - [Docker Container Image](https://hub.docker.com/r/identinet/did-web-server)
+
+    ## Introduction
+
+    **did-web-server** is an HTTP server for providing [Decentralized Identifiers
+    (DIDs)](https://w3c.github.io/did-core) that conform to the [did:web](https://w3c-ccg.github.io/did-method-web/)
+    method. did:web is a straightforward DID method that uses DNS and HTTP servers to host DIDs.
+
+    Unlike other DID methods, did:web doesn't require a blockchain to store identifier states. It uses an HTTP server,
+    which is cost effective to operate and leverages established protocols and software libraries.
+
+    However, traditional HTTP servers are centrally managed and do not allow users to managed hosted documents, making
+    decentralized identifier management challenging. did-web-server addresses this issue by being the first DID-centered
+    HTTP server that enables self-sovereign management of identifiers by their controllers.
+
+    did-web-server leverages DIDs, [Verifiable Credentials (VC)](https://w3c.github.io/vc-data-model), and Verifiable
+    Presentations to authenticate identifiers and encode identifier data. No API tokens, usernames, or passwords are
+    required to interact with the service.
+
+    ## Hosted Offering
+
+    identinet is preparing an enterprise hosted offering of did-web-server for custom domain names. Contact
+    jan-christoph.ebersbach@identinet.io if you are interested in using this service.
+
+    Furthermore, a free to use identity service is being prepared at [id.identinet.io](https://id.identinet.io).
+
+    ## Self-Hosting
+
+    **did-web-server** can be self-hosted on your own infrastructure. Further information is provided in the [docs
+    section](/docs).
+
+  license:
+    name: Proprietary
+    identifier: Proprietary # this is a 3.1.0 spec feature
+    # url: https://identinet.io/license
+  contact:
+    name: identinet GmbH
+    email: support@identinet.io
+    url: https://identinet.io
+
+servers:
+  # - url: https://identinet.io
+  #   description: identinet ID service
+  - url: https://localhost:3000
+    description: Local HTTPS development server
+  - url: http://localhost:3000
+    description: Local HTTP development server
+
+paths:
+  /{id}/did.json:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ID"
+      - name: proofParameters
+        in: query
+        description: "Only valid for GET requests"
+        required: false
+        allowEmptyValue: true
+        example: ""
+        schema:
+          type: string
+    get:
+      tags:
+        - did
+      operationId: resolveDID
+      summary: Reslove DID / Get proof parameters
+      description: |
+        This endpoint can only be called by anyone without authentication.
+        1. Corresponds to the Read (Resolve) method speficied at https://w3c-ccg.github.io/did-method-web/#read-resolve.
+        2. With the `proofParameters` query parameter present, proof parameters are returned that are required for
+           registering, updating, and deleting DID.
+      externalDocs:
+        description: did:web method specification
+        url: https://w3c-ccg.github.io/did-method-web/#read-resolve
+      responses:
+        "200":
+          description: Returns DID Document.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/DIDDoc"
+                  - $ref: "#/components/schemas/ProofParameters"
+        "400":
+          description: Bad Request. Requested path not supported.
+        "404":
+          description: Not Found. DID document not found on server.
+        "500":
+          description: Internal Server Error.
+    post:
+      tags:
+        - did
+      operationId: registerDID
+      summary: Register DID
+      description: |
+        This endpoint can only be called by the owner of the service.
+        Corresponds to the Create (Register) method speficied at https://w3c-ccg.github.io/did-method-web/#create-register.
+      externalDocs:
+        description: did:web method specification
+        url: https://w3c-ccg.github.io/did-method-web/#create-register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifiablePresentation"
+      responses:
+        "204":
+          description: Identifier created / DID document stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProofParameters"
+        "400":
+          description: Bad Request. DID document missing or not valid.
+        "401":
+          description: Unauthorized. Authorization failed due to missing or broken proof signature.
+        "404":
+          description: Not Found. DID of issuer could not be resolved.
+        "409":
+          description: Conflict. DID document already exists on server.
+        "500":
+          description: Internal Server Error.
+    put:
+      tags:
+        - did
+      operationId: updateDID
+      summary: Update DID
+      description: |
+        This endpoint can only be called by the owner of the DID.
+        Corresponds to the Update method speficied at https://w3c-ccg.github.io/did-method-web/#update.
+      externalDocs:
+        description: did:web method specification
+        url: https://w3c-ccg.github.io/did-method-web/#update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifiablePresentation"
+      responses:
+        "200":
+          description: Identifier updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProofParameters"
+        "400":
+          description: Bad Request. DID document missing or not valid.
+        "401":
+          description: Unauthorized. Authorization failed due to missing or broken proof signature.
+        "404":
+          description: Not Found. DID of issuer could not be resolved or DID that is being updated does not exist.
+        "500":
+          description: Internal Server Error.
+    delete:
+      tags:
+        - did
+      operationId: deactivateDID
+      summary: Deactivate DID
+      description: |
+        This endpoint can only be called by the owner of the service.
+        Corresponds to the Deactivate (Revoke) method speficied at https://w3c-ccg.github.io/did-method-web/#deactivate-revoke.
+      externalDocs:
+        description: did:web method specification
+        url: https://w3c-ccg.github.io/did-method-web/#deactivate-revoke
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifiablePresentation"
+      responses:
+        "200":
+          description: Identifier deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProofParameters"
+        "400":
+          description: Bad Request. Requested path not supported.
+        "401":
+          description: Unauthorized. Authorization failed due to missing or broken proof signature.
+        "404":
+          description: Not Found. DID of issuer could not be resolved or DID that is being updated does not exist.
+        "500":
+          description: Internal Server Error.
+
+tags:
+  - name: did
+    description: Everything releated to DIDs
+components:
+  schemas:
+    ID:
+      type: string
+      description: |
+        **ID**: An identifier.
+      example: user1
+
+    DID:
+      type: string
+      description: |
+        **DID**: W3C Decentralized Identifier (DID), see https://w3c.github.io/did-core/.
+      example: did:web:example.com:user1
+
+    ProofParameters:
+      type: object
+      title: ProofParameters
+      description: |
+        **ProofParameters**: Proof parameters define properties that need to be present
+        in the next submitted Verifiable Presentation for PUT, POST and DELETE requests.
+      required:
+        - did
+        - challenge
+        - domain
+        - proof_purpose
+      properties:
+        did:
+          $ref: "#/components/schemas/DID"
+        challenge:
+          type: string
+          description: |
+            Challenge computed by the current state of the DID document, according to
+            [proofs](https://www.w3.org/TR/vc-data-integrity/#proofs).
+          example: f8e9a33856ec54be26d62689a73809713d803344bd0f522709bd0a5e0b0832b5
+        domain:
+          type: string
+          description: |
+            Domain name of the service, according to [proofs](https://www.w3.org/TR/vc-data-integrity/#proofs).
+          example: example.com
+        proof_purpose:
+          type: string
+          description: |
+            Proof purpose according to
+            [verification relationship](https://w3c.github.io/did-core/#dfn-verification-relationship)
+            and [proofs](https://www.w3.org/TR/vc-data-integrity/#proofs).
+          example: authentication
+      example:
+        {
+          "did": "did:web:example.com:user1",
+          "challenge": "f8e9a33856ec54be26d62689a73809713d803344bd0f522709bd0a5e0b0832b5",
+          "domain": "example.com",
+          "proof_purpose": "assertion",
+        }
+
+    DIDDoc:
+      type: object
+      title: DID Document
+      description: |
+        **DID Document**: W3C DID Document, see https://w3c.github.io/did-core/.
+      required:
+        - id
+      properties:
+        id:
+          $ref: "#/components/schemas/DID"
+      example:
+        {
+          "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"],
+          "id": "did:web:example.com",
+          "verificationMethod":
+            [
+              {
+                "id": "did:web:example.com#key-0",
+                "type": "JsonWebKey2020",
+                "controller": "did:web:example.com",
+                "publicKeyJwk": { "kty": "OKP", "crv": "Ed25519", "x": "0-e2i2_Ua1S5HbTYnVB0lj2Z2ytXu2-tYmDFf8f5NjU" },
+              },
+              {
+                "id": "did:web:example.com#key-1",
+                "type": "JsonWebKey2020",
+                "controller": "did:web:example.com",
+                "publicKeyJwk": { "kty": "OKP", "crv": "X25519", "x": "9GXjPGGvmRq9F6Ng5dQQ_s31mfhxrcNZxRGONrmH30k" },
+              },
+              {
+                "id": "did:web:example.com#key-2",
+                "type": "JsonWebKey2020",
+                "controller": "did:web:example.com",
+                "publicKeyJwk":
+                  {
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "38M1FDts7Oea7urmseiugGW7tWc3mLpJh6rKe7xINZ8",
+                    "y": "nDQW6XZ7b_u2Sy9slofYLlG03sOEoug3I0aAPQ0exs4",
+                  },
+              },
+            ],
+          "authentication": ["did:web:example.com#key-0", "did:web:example.com#key-2"],
+          "assertionMethod": ["did:web:example.com#key-0", "did:web:example.com#key-2"],
+          "keyAgreement": ["did:web:example.com#key-1", "did:web:example.com#key-2"],
+        }
+
+    VerifiableCredential:
+      type: object
+      title: VerifiableCredential
+      description: |
+        **VerifiableCredential**: W3C Verifiable Credential, see https://w3c.github.io/vc-data-model/.
+      required:
+        - type
+        - credentialSubject
+        - proof
+      properties:
+        type:
+          type: array
+          items:
+            type: string
+          example:
+            - VerifableCredential
+        credentialSubject:
+          $ref: "#/components/schemas/DIDDoc"
+        proof:
+          type: object
+          example: {}
+      example: { "type": ["VerifiableCredential"], "credentialSubject": { "id": "did:web:example.com" }, "proof": {} }
+
+    VerifiablePresentation:
+      type: object
+      title: VerifiablePresentation
+      description: |
+        **VerifiablePresentation**: W3C Verifiable Presentation, see https://w3c.github.io/vc-data-model/.
+      required:
+        - type
+        - verifiableCredential
+        - proof
+      properties:
+        type:
+          type: array
+          example:
+            - VerifablePresentation
+          items:
+            type: string
+        verifiableCredential:
+          $ref: "#/components/schemas/VerifiableCredential"
+        proof:
+          type: object
+      example:
+        {
+          "type": ["VerifiablePresentation"],
+          "verifiableCredential":
+            { "type": ["VerifiableCredential"], "credentialSubject": { "id": "did:web:example.com" }, "proof": {} },
+          "proof": {},
+        }
